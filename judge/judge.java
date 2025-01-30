@@ -1,14 +1,43 @@
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.util.concurrent.TimeoutException;
 import java.io.InputStreamReader;
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.DeliverCallback;
 
 public class judge {
     public static void main(String[] args){
-        String gradlewPath = "./gradlew";
 
-        ProcessBuilder processBuilder = new ProcessBuilder(gradlewPath, "build");
+        try{
+            ConnectionFactory factory = new ConnectionFactory();
+            factory.setHost("localhost");
+            Connection connection = factory.newConnection();
+            Channel channel = connection.createChannel();
 
-        try {
+            channel.queueDeclare("spring.education.queue", true, false, false, null);
+            System.out.println(" [*] Waiting for messages. To exit press CTRL+C");
+
+            DeliverCallback deliverCallback = (consumerTag, delivery) -> {
+                String message = new String(delivery.getBody(), "UTF-8");
+                System.out.println(" [x] Received '" + message + "'");
+                buildSpring();
+            };
+
+            channel.basicConsume("spring.education.queue", true, deliverCallback, consumerTag -> { });
+        }catch(IOException e){
+            e.printStackTrace();
+        }catch(TimeoutException e){
+            e.printStackTrace();
+        }
+    }
+
+
+    public static void buildSpring(){
+        try{
+            String gradlewPath = "../gradlew";
+            ProcessBuilder processBuilder = new ProcessBuilder(gradlewPath, "build");
 
             Process process = processBuilder.start();
 
@@ -39,12 +68,10 @@ public class judge {
             // 프로세스 종료 대기 및 종료 코드 확인
             int exitCode = process.waitFor();
             System.out.println("프로세스 종료 코드: " + exitCode);
-
         }catch(IOException e){
             e.printStackTrace();
         }catch(InterruptedException e){
             e.printStackTrace();
-            Thread.currentThread().interrupt();
         }
     }
 }
