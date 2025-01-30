@@ -2,6 +2,8 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 import java.io.InputStreamReader;
+import java.util.Map;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
@@ -21,7 +23,10 @@ public class judge {
 
             DeliverCallback deliverCallback = (consumerTag, delivery) -> {
                 String message = new String(delivery.getBody(), "UTF-8");
-                System.out.println(" [x] Received '" + message + "'");
+
+                ObjectMapper objectMapper = new ObjectMapper();
+                Map<String, String> dtoMap = objectMapper.readValue(message, Map.class);
+                System.out.println(" [x] Received '" + dtoMap.get("service") + "'");
                 buildSpring();
             };
 
