@@ -44,6 +44,11 @@ application {
     mainClass = 'org.example.App'
 }
 
+tasks.named('run') {
+    // 원하는 워킹 디렉토리를 지정
+    workingDir = project.rootDir
+}
+
 tasks.named('test') {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()

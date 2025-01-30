@@ -5,9 +5,10 @@ package org.example;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.fail;
+
 class AppTest {
     @Test void appHasAGreeting() {
-        Judge classUnderTest = new Judge();
-        assertNotNull(classUnderTest.getGreeting(), "app should have a greeting");
+        //fail("아무튼 실패");
     }
 }

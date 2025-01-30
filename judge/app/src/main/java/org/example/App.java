@@ -4,7 +4,11 @@
 package org.example;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.concurrent.TimeoutException;
 import java.io.InputStreamReader;
 import java.util.Map;
@@ -16,7 +20,7 @@ import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.DeliverCallback;
 
-public class Judge {
+public class App {
     public static void main(String[] args) {
 
         try{
@@ -48,7 +52,24 @@ public class Judge {
             Map<String, String> dtoMap = null;
             dtoMap = objectMapper.readValue(message, Map.class);
             System.out.println(" [x] Received '" + dtoMap.get("service") + "'");
+
+            //현재 경로 확인용 - intellij 와 gradlew 가 달라서 원인 파악용.
+            //intellij : Working Directory = /Users/user/github/spring-education/spring-judge/judge
+            //graldew : Working Directory = /Users/user/github/spring-education/spring-judge/judge/app
+            System.out.println("Working Directory = " + System.getProperty("user.dir"));
+
+            //dtoMap 에서 controller 받은 코드 파일에 덮어쓰기
+            String basicFilePath = "../src/main/java/com/spring_education/template";
+            String filePath = basicFilePath + "/controller/TestController.java";
+            Files.write(Paths.get(filePath), dtoMap.get("controller").getBytes(), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
+
+            //dtoMap 에서 service 받은 코드 파일에 덮어쓰기
+            filePath = basicFilePath + "/service/TestService.java";
+            Files.write(Paths.get(filePath), dtoMap.get("service").getBytes(), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
+
         } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        } catch (IOException e){
             e.printStackTrace();
         }
 
@@ -58,9 +79,12 @@ public class Judge {
 
     public static void buildSpring(){
         try{
-            String gradlewPath = "../gradlew";
+            String gradlewPath = "./gradlew";
+
             ProcessBuilder processBuilder = new ProcessBuilder(gradlewPath, "build");
 
+            // directory 설정 필수(!!). 이렇게 해야 스프링부트의 graldew 설정하여 잘 작동함
+            processBuilder.directory(new File(".."));
             Process process = processBuilder.start();
 
             // 프로세스의 출력 읽기
@@ -85,6 +109,14 @@ public class Judge {
             String line;
             while ((line = reader.readLine()) != null) {
                 System.out.println(line);
+            }
+
+            //에러 로그 (gradlew build 하면서)
+            try (BufferedReader errorReader = new BufferedReader(
+                    new InputStreamReader(process.getErrorStream()))) {
+                while ((line = errorReader.readLine()) != null) {
+                    System.err.println(line);
+                }
             }
 
             // 프로세스 종료 대기 및 종료 코드 확인
