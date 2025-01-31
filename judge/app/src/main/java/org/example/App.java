@@ -9,6 +9,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 import java.util.concurrent.TimeoutException;
@@ -26,9 +27,11 @@ public class App {
     static String DB_URL;
     static String DB_USER;
     static String DB_PASSWORD;
+    static Map<String, String> dtoMap = null;
 
     public static void main(String[] args) {
 
+        // 환경 변수 가져오기
         Properties props = new Properties();
 
         try (FileInputStream fis = new FileInputStream("config.properties")) {
@@ -42,6 +45,9 @@ public class App {
         DB_USER = props.getProperty("db.user");
         DB_PASSWORD = props.getProperty("db.password");
 
+
+
+
         try{
             ConnectionFactory factory = new ConnectionFactory();
             factory.setHost("localhost");
@@ -53,6 +59,11 @@ public class App {
 
             DeliverCallback deliverCallback = (consumerTag, delivery) -> {
                 String message = new String(delivery.getBody(), "UTF-8");
+
+                //message dto 형태로 분석
+                ObjectMapper objectMapper = new ObjectMapper();
+                dtoMap = objectMapper.readValue(message, Map.class);
+
                 updateContent(message);
                 buildAndUpdate(message);
             };
@@ -97,6 +108,31 @@ public class App {
 
 
     public static void buildAndUpdate(String message){
+
+        // 빌드 전에 이미 같은 제출 이력이 있는지 확인
+        String controller = dtoMap.get("controller");
+        String service = dtoMap.get("service");
+
+        String selectSQL = "select * from problem_submit where user_id = ? and problem_id = ?";
+        try(java.sql.Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+            PreparedStatement pstmt = conn.prepareStatement(selectSQL)){
+
+            pstmt.setString(1, dtoMap.get("user_id"));
+            pstmt.setString(2, dtoMap.get("problem_id"));
+            ResultSet rs = pstmt.executeQuery();
+
+            while(rs.next()){
+                if(controller.equals(rs.getString("controller_code")) && service.equals(rs.getString("service_code"))){
+                    System.out.println("제출한 코드와 같습니다.");
+                    return;
+                }
+            }
+
+        } catch (SQLException e) {
+            System.err.println("DB 삽입 중 오류 발생: " + e.getMessage());
+        }
+
+        // 빌드
         try{
             String gradlewPath = "./gradlew";
 
@@ -143,10 +179,6 @@ public class App {
             System.out.println("프로세스 종료 코드: " + exitCode);
 
             // 채점결과에 따라 db 에 반영하는 부분
-
-            ObjectMapper objectMapper = new ObjectMapper();
-            Map<String, String> dtoMap = null;
-            dtoMap = objectMapper.readValue(message, Map.class);
             String problemSubmitId = dtoMap.get("problem_submit_id");
 
             if(exitCode == 0){
