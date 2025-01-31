@@ -3,14 +3,15 @@
  */
 package org.example;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.Properties;
 import java.util.concurrent.TimeoutException;
-import java.io.InputStreamReader;
 import java.util.Map;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -21,7 +22,25 @@ import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.DeliverCallback;
 
 public class App {
+
+    static String DB_URL;
+    static String DB_USER;
+    static String DB_PASSWORD;
+
     public static void main(String[] args) {
+
+        Properties props = new Properties();
+
+        try (FileInputStream fis = new FileInputStream("config.properties")) {
+            props.load(fis);
+        } catch (IOException e) {
+            System.err.println("config.properties 파일을 읽을 수 없습니다: " + e.getMessage());
+            return;
+        }
+
+        DB_URL = props.getProperty("db.url");
+        DB_USER = props.getProperty("db.user");
+        DB_PASSWORD = props.getProperty("db.password");
 
         try{
             ConnectionFactory factory = new ConnectionFactory();
@@ -35,7 +54,7 @@ public class App {
             DeliverCallback deliverCallback = (consumerTag, delivery) -> {
                 String message = new String(delivery.getBody(), "UTF-8");
                 updateContent(message);
-                buildSpring();
+                buildAndUpdate(message);
             };
 
             channel.basicConsume("spring.education.queue", true, deliverCallback, consumerTag -> { });
@@ -77,7 +96,7 @@ public class App {
     }
 
 
-    public static void buildSpring(){
+    public static void buildAndUpdate(String message){
         try{
             String gradlewPath = "./gradlew";
 
@@ -122,6 +141,40 @@ public class App {
             // 프로세스 종료 대기 및 종료 코드 확인
             int exitCode = process.waitFor();
             System.out.println("프로세스 종료 코드: " + exitCode);
+
+            // 채점결과에 따라 db 에 반영하는 부분
+
+            ObjectMapper objectMapper = new ObjectMapper();
+            Map<String, String> dtoMap = null;
+            dtoMap = objectMapper.readValue(message, Map.class);
+            String problemSubmitId = dtoMap.get("problem_submit_id");
+
+            if(exitCode == 0){
+                //정답입니다!!
+                String updateSQL = "update problem_submit set is_correct = 1 where problem_submit_id = ?";
+                try(java.sql.Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+                    PreparedStatement pstmt = conn.prepareStatement(updateSQL)){
+
+                    pstmt.setString(1, problemSubmitId);
+                    pstmt.executeUpdate();
+
+                } catch (SQLException e) {
+                    System.err.println("DB 삽입 중 오류 발생: " + e.getMessage());
+                }
+
+            }else{
+                //틀렸습니다!!
+                String updateSQL = "update problem_submit set is_correct = 0 where problem_submit_id = ?";
+                try(java.sql.Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+                    PreparedStatement pstmt = conn.prepareStatement(updateSQL)){
+
+                    pstmt.setString(1, problemSubmitId);
+                    pstmt.executeUpdate();
+
+                } catch (SQLException e) {
+                    System.err.println("DB 삽입 중 오류 발생: " + e.getMessage());
+                }
+            }
         }catch(IOException e){
             e.printStackTrace();
         }catch(InterruptedException e){
